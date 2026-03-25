@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -83,6 +84,7 @@ static const uint8_t NUMBERS[10][7] = {
     {0, 0, 0, 0, 1, 0, 0}  // 9
 };
 
+// Función para cargar segmentos en el display de 7 segmentos
 void cargar_segmentos(int numero) {
     if (numero == -1) {  // Mostrar guion "--"
         gpio_set_level(SEG_A, 1);
@@ -94,15 +96,19 @@ void cargar_segmentos(int numero) {
         gpio_set_level(SEG_G, 0);   // solo g encendido
         return;
     }
-    uint8_t segments = NUMBERS[numero];
-    gpio_set_level(SEG_A, (segments & 0x01) ? 1 : 0);
-    gpio_set_level(SEG_B, (segments & 0x02) ? 1 : 0);
-    gpio_set_level(SEG_C, (segments & 0x04) ? 1 : 0);
-    gpio_set_level(SEG_D, (segments & 0x08) ? 1 : 0);
-    gpio_set_level(SEG_E, (segments & 0x10) ? 1 : 0);
-    gpio_set_level(SEG_F, (segments & 0x20) ? 1 : 0);
-    gpio_set_level(SEG_G, (segments & 0x40) ? 1 : 0);
+    
+    uint8_t segments[7];  // Creamos un arreglo para almacenar los 7 segmentos
+    memcpy(segments, NUMBERS[numero], sizeof(segments));  // Copiamos los segmentos del número
+    
+    gpio_set_level(SEG_A, (segments[0]) ? 1 : 0);
+    gpio_set_level(SEG_B, (segments[1]) ? 1 : 0);
+    gpio_set_level(SEG_C, (segments[2]) ? 1 : 0);
+    gpio_set_level(SEG_D, (segments[3]) ? 1 : 0);
+    gpio_set_level(SEG_E, (segments[4]) ? 1 : 0);
+    gpio_set_level(SEG_F, (segments[5]) ? 1 : 0);
+    gpio_set_level(SEG_G, (segments[6]) ? 1 : 0);
 }
+
 
 // Función para apagar los dígitos del display
 void apagar_digitos(void) {
