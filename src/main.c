@@ -1,11 +1,3 @@
-//=========== JUEGO ATRAPA LA MANZANA ========================
-// Display 1 = Puntaje 
-// Display 2 = Vidas 
-// Matriz 8x8 para el juego
-// 2 botones para mover el jugador (izquierda y derecha)
-// 1 botón para reiniciar el juego
-// LED verde que parpadea cuando llega al destino
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
