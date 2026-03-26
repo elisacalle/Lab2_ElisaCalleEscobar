@@ -1,4 +1,8 @@
-
+//=========== JUEGO ATRAPA LA MANZANA ========================
+// Matriz 6x6 para el juego
+// 2 botones para mover el jugador (izquierda y derecha)
+// 1 botón para reiniciar el juego
+// LED verde que parpadea cuando llega al destino
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -6,291 +10,191 @@
 #include "freertos/task.h"
 #include "driver/gpio.h"
 #include "driver/timer.h"
-
-// Pines
-
-// Segmentos para el display de 7 segmentos
-#define SEG_A 4
-#define SEG_B 5
-#define SEG_C 18
-#define SEG_D 19
-#define SEG_E 21
-#define SEG_F 22
-#define SEG_G 23
-
-// Comunes para los displays (usando transistor 2N3906)
-#define DIG_1 26 // Primer dígito (puntaje)
-#define DIG_2 27 // Segundo dígito (vidas)
-
-// Matriz 8x8 (filas y columnas)
-#define ROW_0 33
+// ==================== PINES ====================
+// Matriz 6x6 (filas y columnas)
 #define ROW_1 32
 #define ROW_2 35
 #define ROW_3 34
 #define ROW_4 25
 #define ROW_5 26
 #define ROW_6 27
-#define ROW_7 14
 
-#define COL_R_0 18
-#define COL_R_1 19
-#define COL_R_2 21
-#define COL_R_3 22
-#define COL_R_4 23
-#define COL_R_5 12
-#define COL_R_6 13
-#define COL_R_7 15
+#define COL_R_1 19  // Columna 1 (Rojo)
+#define COL_R_2 21  // Columna 2 (Rojo)
+#define COL_R_3 22  // Columna 3 (Rojo)
+#define COL_R_4 23  // Columna 4 (Rojo)
+#define COL_R_5 12  // Columna 5 (Rojo)
+#define COL_R_6 18  // Columna 6 (Rojo)
 
-#define COL_G_0 2
-#define COL_G_1 4
-#define COL_G_2 5
-#define COL_G_3 17
-#define COL_G_4 16
-#define COL_G_5 8
-#define COL_G_6 9
-#define COL_G_7 10
+#define COL_G_1 4   // Columna 1 (Verde)
+#define COL_G_2 5   // Columna 2 (Verde)
+#define COL_G_3 17   // Columna 3 (Verde)
+#define COL_G_4 16  // Columna 4 (Verde)
+#define COL_G_5 2  // Columna 5 (Verde)
+#define COL_G_6 15   // Columna 6 (Verde)
 
 // Botones para mover el jugador y reiniciar el juego
-#define BTN_LEFT 32
-#define BTN_RIGHT 33
-#define BTN_START 35
+#define BTN_LEFT 33   // Botón para mover a la izquierda
+#define BTN_RIGHT 0 // Botón para mover a la derecha
+#define BTN_START 14 // Botón para reiniciar el juego
 
-// Var Globales
-
-// Estado del juego inicialmente
-static volatile int player_x = 3;
-static volatile int player_y = 7;
+// ==================== VARIABLES GLOBALES ====================
+// Estado del juego
+static volatile int player_x = 2;
+static volatile int player_y = 5;  // Ajustado para que esté dentro de la matriz reducida
 static volatile int apple_x = 4;
 static volatile int apple_y = 0;
 static volatile int score = 0;
 static volatile int lives = 3;
 static volatile bool game_over = false;
 static volatile bool game_started = false;
-static volatile bool led_verde_estado = false;
-static volatile uint8_t matrix[8][8]; // Matriz para el juego (0 = apagado, 1 = rojo, 2 = verde)
+static volatile uint8_t matrix[6][6]; // Matriz 6x6 para el juego
 
-// Display de ánodo común
-// 0 = segmento encendido, 1 = segmento apagado
-static const uint8_t NUMBERS[10][7] = {
-    {0, 0, 0, 0, 0, 0, 1}, // 0
-    {1, 0, 0, 1, 1, 1, 1}, // 1
-    {0, 0, 1, 0, 0, 1, 0}, // 2
-    {0, 0, 0, 0, 1, 1, 0}, // 3
-    {1, 0, 0, 1, 1, 0, 0}, // 4
-    {0, 1, 0, 0, 1, 0, 0}, // 5
-    {0, 1, 0, 0, 0, 0, 0}, // 6
-    {0, 0, 0, 1, 1, 1, 1}, // 7
-    {0, 0, 0, 0, 0, 0, 0}, // 8
-    {0, 0, 0, 0, 1, 0, 0}  // 9
-};
-
-// Función para cargar segmentos en el display de 7 segmentos
-void cargar_segmentos(int numero) {
-    if (numero == -1) {  // Mostrar guion "--"
-        gpio_set_level(SEG_A, 1);
-        gpio_set_level(SEG_B, 1);
-        gpio_set_level(SEG_C, 1);
-        gpio_set_level(SEG_D, 1);
-        gpio_set_level(SEG_E, 1);
-        gpio_set_level(SEG_F, 1);
-        gpio_set_level(SEG_G, 0);   // solo g encendido
-        return;
-    }
-    
-    uint8_t segments[7];  // Creamos un arreglo para almacenar los 7 segmentos
-    memcpy(segments, NUMBERS[numero], sizeof(segments));  // Copiamos los segmentos del número
-    
-    gpio_set_level(SEG_A, (segments[0]) ? 1 : 0);
-    gpio_set_level(SEG_B, (segments[1]) ? 1 : 0);
-    gpio_set_level(SEG_C, (segments[2]) ? 1 : 0);
-    gpio_set_level(SEG_D, (segments[3]) ? 1 : 0);
-    gpio_set_level(SEG_E, (segments[4]) ? 1 : 0);
-    gpio_set_level(SEG_F, (segments[5]) ? 1 : 0);
-    gpio_set_level(SEG_G, (segments[6]) ? 1 : 0);
-}
-
-
-// Función para apagar los dígitos del display
-void apagar_digitos(void) {
-    gpio_set_level(DIG_1, 1);
-    gpio_set_level(DIG_2, 1);
-}
-
-// Refrescar el display
-void refrescar_displays(void) {
-    apagar_digitos();
-    cargar_segmentos(score / 10); // Decenas
-    gpio_set_level(DIG_1, 0);    // Activar primer dígito (para puntaje)
-    vTaskDelay(pdMS_TO_TICKS(5));
-
-    // Mostrar las vidas en el segundo dígito
-    apagar_digitos();
-    cargar_segmentos(lives);     // Mostrar vidas
-    gpio_set_level(DIG_2, 0);    // Activar segundo dígito (para vidas)
-    vTaskDelay(pdMS_TO_TICKS(5));
-}
-
-// ==================== MATRIZ 8x8 ====================
-
+// ==================== FUNCIONES DE LA MATRIZ 6x6 ====================
+// Limpia la matriz 6x6
 void clear_matrix(void) {
-    for (int row = 0; row < 8; row++) {
-        for (int col = 0; col < 8; col++) {
-            matrix[row][col] = 0;
-        }
-    }
+   for (int row = 0; row < 6; row++) {
+       for (int col = 0; col < 6; col++) {
+           matrix[row][col] = 0;  // Apagar toda la matriz
+       }
+   }
 }
-
 // Activa el pixel en la matriz
 void set_pixel(int x, int y, uint8_t color) {
-    if (x >= 0 && x < 8 && y >= 0 && y < 8) {
-        matrix[y][x] = color;
-    }
+   if (x >= 0 && x < 6 && y >= 0 && y < 6) {
+       matrix[y][x] = color;  // Establece el color del pixel
+   }
 }
-
-// Dibuja el juego en la matriz 8x8
+// Dibuja el juego en la matriz 6x6
 void draw_game(void) {
-    clear_matrix();
-    set_pixel(player_x, player_y, 2);  // Verde
-    if (!game_over) {
-        set_pixel(apple_x, apple_y, 1);  // Rojo
-    }
+   clear_matrix();  // Limpia la matriz
+   // El jugador es rojo (1)
+   set_pixel(player_x, player_y, 1);  // Rojo
+   // La manzana es verde (2)
+   if (!game_over) {
+       set_pixel(apple_x, apple_y, 2);  // Verde
+   }
 }
-
-// ==FUNCIONES DEL JUEGO ==
-
+// ==================== FUNCIONES DEL JUEGO ====================
 // Reinicia el juego
 void reset_game(void) {
-    player_x = 3;
-    player_y = 7;
-    apple_x = rand() % 8;
-    apple_y = 0;
-    score = 0;
-    lives = 3;
-    game_over = false;
-    game_started = true;
+   player_x = 2;  // Ajustado para la nueva matriz
+   player_y = 5;  // Ajustado para la nueva matriz
+   apple_x = rand() % 6; // La manzana solo aparece entre las columnas 1 a 6
+   apple_y = 0;
+   score = 0;
+   lives = 3;
+   game_over = false;
+   game_started = true;
 }
-
-// Jugador hacia la izquierda
+// Mueve el jugador hacia la izquierda
 void move_player_left(void) {
-    if (player_x > 0) player_x--;
+   if (player_x > 0) player_x--;
 }
-
-// Jugador hacia la derecha
+// Mueve el jugador hacia la derecha
 void move_player_right(void) {
-    if (player_x < 7) player_x++;
+   if (player_x < 5) player_x++; // Ajustado a la nueva matriz
 }
-
-// Manzana hacia abajo
+// Mueve la manzana hacia abajo
 void move_apple_down(void) {
-    apple_y++;
+   apple_y++;
 }
-
 // Respawn de la manzana
 void respawn_apple(void) {
-    apple_x = rand() % 8;
-    apple_y = 0;
+   apple_x = rand() % 6; // Asegura que la manzana aparezca entre las columnas 1 a 6
+   apple_y = 0;
 }
-
 // Verifica la captura de la manzana o si se ha perdido una vida
 void check_collision_or_miss(void) {
-    if (apple_y == player_y) {
-        if (apple_x == player_x) {
-            score++;
-        } else {
-            lives--;
-            if (lives <= 0) {
-                game_over = true;
-            }
-        }
-        respawn_apple();
-    }
-
-    if (apple_y >= 8) {
-        lives--;
-        if (lives <= 0) {
-            game_over = true;
-        }
-        respawn_apple();
-    }
+   if (apple_y == player_y) {
+       if (apple_x == player_x) {
+           // Cuando el jugador atrapa la manzana, ilumina toda la matriz en verde
+           for (int row = 0; row < 6; row++) {
+               for (int col = 0; col < 6; col++) {
+                   matrix[row][col] = 2;  // Ilumina toda la matriz de verde (2)
+               }
+           }
+           score++;  // Incrementa el puntaje
+       } else {
+           lives--;  // Si no atrapó la manzana, pierde una vida
+           if (lives <= 0) {
+               game_over = true;  // Si no tiene vidas, termina el juego
+           }
+       }
+       respawn_apple();  // Respawn de la manzana
+   }
+   if (apple_y >= 6) {
+       lives--;  // Si la manzana cae fuera de la matriz, pierde una vida
+       if (lives <= 0) {
+           game_over = true;  // Si no tiene vidas, termina el juego
+       }
+       respawn_apple();  // Respawn de la manzana
+   }
 }
-
 // Función para mostrar la pantalla de Game Over
 void show_game_over_screen(void) {
-    for (int row = 0; row < 8; row++) {
-        for (int col = 0; col < 8; col++) {
-            matrix[row][col] = 1; // Rojo
-        }
-    }
-    for (int i = 0; i < 40; i++) {
-        refrescar_displays();
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
+   for (int row = 0; row < 6; row++) {
+       for (int col = 0; col < 6; col++) {
+           matrix[row][col] = 1;  // Ilumina toda la matriz en rojo cuando termina el juego
+       }
+   }
+   for (int i = 0; i < 40; i++) {
+       // Llamada a refrescar la matriz 6x6
+       vTaskDelay(pdMS_TO_TICKS(10));
+   }
+}
+// ==================== FUNCIONES DEL TEMPORIZADOR ====================
+void setup_timer(void) {
+   // Configuración del temporizador para multiplexar las filas
+   // Aquí va la configuración específica de tu temporizador
 }
 
-// == FUNCION PRINCIPAL ==
-
+// ==================== FUNCION PRINCIPAL ====================
 void app_main(void) {
-    gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << SEG_A) | 
-                        (1ULL << SEG_B) | 
-                        (1ULL << SEG_C) | 
-                        (1ULL << SEG_D) |
-                        (1ULL << SEG_E) | 
-                        (1ULL << SEG_F) | 
-                        (1ULL << SEG_G) |
-                        (1ULL << DIG_1) | 
-                        (1ULL << DIG_2),
-        .mode = GPIO_MODE_OUTPUT,
-    };
-    gpio_config(&io_conf);
-
-    gpio_config_t button_conf = {
-        .pin_bit_mask = (1ULL << BTN_LEFT) | 
-                        (1ULL << BTN_RIGHT) | 
-                        (1ULL << BTN_START),
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-    };
-    gpio_config(&button_conf);
-
-    clear_matrix();
-    reset_game();
-
-    while (1) {
-        draw_game();
-        refrescar_displays();
-        
-        if (!game_started) {
-            if (gpio_get_level(BTN_START) == 0) {
-                reset_game();
-                vTaskDelay(pdMS_TO_TICKS(250));
-            }
-            vTaskDelay(pdMS_TO_TICKS(10));
-            continue;
-        }
-
-        if (game_over) {
-            show_game_over_screen();
-            if (gpio_get_level(BTN_START) == 0) {
-                reset_game();
-                vTaskDelay(pdMS_TO_TICKS(250));
-            }
-            vTaskDelay(pdMS_TO_TICKS(10));
-            continue;
-        }
-
-        if (gpio_get_level(BTN_LEFT) == 0) {
-            move_player_left();
-            vTaskDelay(pdMS_TO_TICKS(120));
-        }
-
-        if (gpio_get_level(BTN_RIGHT) == 0) {
-            move_player_right();
-            vTaskDelay(pdMS_TO_TICKS(120));
-        }
-
-        move_apple_down();
-        check_collision_or_miss();
-        vTaskDelay(pdMS_TO_TICKS(250));
-    }
+   gpio_config_t io_conf = {
+       .pin_bit_mask = (1ULL << ROW_1) | (1ULL << ROW_2) | (1ULL << ROW_3) | (1ULL << ROW_4) |
+                       (1ULL << ROW_5) | (1ULL << ROW_6) |
+                       (1ULL << COL_R_1) | (1ULL << COL_R_2) | (1ULL << COL_R_3) | (1ULL << COL_R_4) |
+                       (1ULL << COL_R_5) | (1ULL << COL_R_6) |
+                       (1ULL << COL_G_1) | (1ULL << COL_G_2) | (1ULL << COL_G_3) | (1ULL << COL_G_4) |
+                       (1ULL << COL_G_5) | (1ULL << COL_G_6),
+       .mode = GPIO_MODE_OUTPUT,
+   };
+   gpio_config(&io_conf);
+   // Configurar el temporizador para multiplexar las filas
+   setup_timer();
+   // Iniciar el juego o la lógica principal
+   while (1) {
+       draw_game();  // Dibuja el estado actual del juego
+       // Refrescar la matriz 6x6
+       vTaskDelay(pdMS_TO_TICKS(250));
+       if (!game_started) {
+           if (gpio_get_level(BTN_START) == 0) {
+               reset_game();
+               vTaskDelay(pdMS_TO_TICKS(250));
+           }
+           vTaskDelay(pdMS_TO_TICKS(10));
+           continue;
+       }
+       if (game_over) {
+           show_game_over_screen();
+           if (gpio_get_level(BTN_START) == 0) {
+               reset_game();
+               vTaskDelay(pdMS_TO_TICKS(250));
+           }
+           vTaskDelay(pdMS_TO_TICKS(10));
+           continue;
+       }
+       if (gpio_get_level(BTN_LEFT) == 0) {
+           move_player_left();
+           vTaskDelay(pdMS_TO_TICKS(120));
+       }
+       if (gpio_get_level(BTN_RIGHT) == 0) {
+           move_player_right();
+           vTaskDelay(pdMS_TO_TICKS(120));
+       }
+       move_apple_down();
+       check_collision_or_miss();
+       vTaskDelay(pdMS_TO_TICKS(250));
+   }
 }
