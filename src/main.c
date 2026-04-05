@@ -1,8 +1,3 @@
-//=========== JUEGO ATRAPA LA MANZANA ========================
-// Matriz 6x6 para el juego
-// 2 botones para mover el jugador (izquierda y derecha)
-// 1 botón para reiniciar el juego
-// LED verde que parpadea cuando llega al destino
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -10,191 +5,339 @@
 #include "freertos/task.h"
 #include "driver/gpio.h"
 #include "driver/timer.h"
-// ==================== PINES ====================
-// Matriz 6x6 (filas y columnas)
-#define ROW_1 32
-#define ROW_2 35
-#define ROW_3 34
-#define ROW_4 25
-#define ROW_5 26
-#define ROW_6 27
 
-#define COL_R_1 19  // Columna 1 (Rojo)
-#define COL_R_2 21  // Columna 2 (Rojo)
-#define COL_R_3 22  // Columna 3 (Rojo)
-#define COL_R_4 23  // Columna 4 (Rojo)
-#define COL_R_5 12  // Columna 5 (Rojo)
-#define COL_R_6 18  // Columna 6 (Rojo)
+#define MATRIX_W 6
+#define MATRIX_H 6
 
-#define COL_G_1 4   // Columna 1 (Verde)
-#define COL_G_2 5   // Columna 2 (Verde)
-#define COL_G_3 17   // Columna 3 (Verde)
-#define COL_G_4 16  // Columna 4 (Verde)
-#define COL_G_5 2  // Columna 5 (Verde)
-#define COL_G_6 15   // Columna 6 (Verde)
+#define ROW_ACTIVE_LEVEL   1
+#define ROW_INACTIVE_LEVEL 0
 
-// Botones para mover el jugador y reiniciar el juego
-#define BTN_LEFT 33   // Botón para mover a la izquierda
-#define BTN_RIGHT 0 // Botón para mover a la derecha
-#define BTN_START 14 // Botón para reiniciar el juego
+#define COL_ACTIVE_LEVEL   0
+#define COL_INACTIVE_LEVEL 1
 
-// ==================== VARIABLES GLOBALES ====================
-// Estado del juego
-static volatile int player_x = 2;
-static volatile int player_y = 5;  // Ajustado para que esté dentro de la matriz reducida
-static volatile int apple_x = 4;
-static volatile int apple_y = 0;
+#define PIXEL_OFF    0
+#define PIXEL_RED    1
+#define PIXEL_GREEN  2
+
+#define REFRESH_ROW_MS        1
+#define REFRESH_FRAME_MS      5
+#define GAME_STEP_MS          20000
+#define BUTTON_DEBOUNCE_MS    120
+#define START_DEBOUNCE_MS     200
+#define FLASH_MS              180
+
+// 6 filas
+#define ROW_1 16
+#define ROW_2 17
+#define ROW_3 18
+#define ROW_4 19
+#define ROW_5 21
+#define ROW_6 22
+
+// 5 columnas rojas
+#define COL_R_2 23
+#define COL_R_3 25
+#define COL_R_4 26
+#define COL_R_5 27
+#define COL_R_6 32
+
+// 1 sola columna verde: la canasta
+#define COL_G_1 33
+
+#define BTN_UP    14
+#define BTN_DOWN  5
+#define BTN_START 13
+
+static const int row_pins[MATRIX_H] = {
+    ROW_1, ROW_2, ROW_3, ROW_4, ROW_5, ROW_6
+};
+
+static const int red_col_pins[5] = {
+    COL_R_2, COL_R_3, COL_R_4, COL_R_5, COL_R_6
+};
+
+static volatile uint8_t matrix[MATRIX_H][MATRIX_W];
+
+static volatile int basket_y = 2;   // canasta en columna 0, se mueve vertical
+static volatile int apple_x = 5;    // manzana inicia a la derecha
+static volatile int apple_y = 3;
+
 static volatile int score = 0;
 static volatile int lives = 3;
-static volatile bool game_over = false;
+
 static volatile bool game_started = false;
-static volatile uint8_t matrix[6][6]; // Matriz 6x6 para el juego
+static volatile bool game_over = false;
 
-// ==================== FUNCIONES DE LA MATRIZ 6x6 ====================
-// Limpia la matriz 6x6
+//== FUNCIONES BÁSICAS ==
 void clear_matrix(void) {
-   for (int row = 0; row < 6; row++) {
-       for (int col = 0; col < 6; col++) {
-           matrix[row][col] = 0;  // Apagar toda la matriz
-       }
-   }
-}
-// Activa el pixel en la matriz
-void set_pixel(int x, int y, uint8_t color) {
-   if (x >= 0 && x < 6 && y >= 0 && y < 6) {
-       matrix[y][x] = color;  // Establece el color del pixel
-   }
-}
-// Dibuja el juego en la matriz 6x6
-void draw_game(void) {
-   clear_matrix();  // Limpia la matriz
-   // El jugador es rojo (1)
-   set_pixel(player_x, player_y, 1);  // Rojo
-   // La manzana es verde (2)
-   if (!game_over) {
-       set_pixel(apple_x, apple_y, 2);  // Verde
-   }
-}
-// ==================== FUNCIONES DEL JUEGO ====================
-// Reinicia el juego
-void reset_game(void) {
-   player_x = 2;  // Ajustado para la nueva matriz
-   player_y = 5;  // Ajustado para la nueva matriz
-   apple_x = rand() % 6; // La manzana solo aparece entre las columnas 1 a 6
-   apple_y = 0;
-   score = 0;
-   lives = 3;
-   game_over = false;
-   game_started = true;
-}
-// Mueve el jugador hacia la izquierda
-void move_player_left(void) {
-   if (player_x > 0) player_x--;
-}
-// Mueve el jugador hacia la derecha
-void move_player_right(void) {
-   if (player_x < 5) player_x++; // Ajustado a la nueva matriz
-}
-// Mueve la manzana hacia abajo
-void move_apple_down(void) {
-   apple_y++;
-}
-// Respawn de la manzana
-void respawn_apple(void) {
-   apple_x = rand() % 6; // Asegura que la manzana aparezca entre las columnas 1 a 6
-   apple_y = 0;
-}
-// Verifica la captura de la manzana o si se ha perdido una vida
-void check_collision_or_miss(void) {
-   if (apple_y == player_y) {
-       if (apple_x == player_x) {
-           // Cuando el jugador atrapa la manzana, ilumina toda la matriz en verde
-           for (int row = 0; row < 6; row++) {
-               for (int col = 0; col < 6; col++) {
-                   matrix[row][col] = 2;  // Ilumina toda la matriz de verde (2)
-               }
-           }
-           score++;  // Incrementa el puntaje
-       } else {
-           lives--;  // Si no atrapó la manzana, pierde una vida
-           if (lives <= 0) {
-               game_over = true;  // Si no tiene vidas, termina el juego
-           }
-       }
-       respawn_apple();  // Respawn de la manzana
-   }
-   if (apple_y >= 6) {
-       lives--;  // Si la manzana cae fuera de la matriz, pierde una vida
-       if (lives <= 0) {
-           game_over = true;  // Si no tiene vidas, termina el juego
-       }
-       respawn_apple();  // Respawn de la manzana
-   }
-}
-// Función para mostrar la pantalla de Game Over
-void show_game_over_screen(void) {
-   for (int row = 0; row < 6; row++) {
-       for (int col = 0; col < 6; col++) {
-           matrix[row][col] = 1;  // Ilumina toda la matriz en rojo cuando termina el juego
-       }
-   }
-   for (int i = 0; i < 40; i++) {
-       // Llamada a refrescar la matriz 6x6
-       vTaskDelay(pdMS_TO_TICKS(10));
-   }
-}
-// ==================== FUNCIONES DEL TEMPORIZADOR ====================
-void setup_timer(void) {
-   // Configuración del temporizador para multiplexar las filas
-   // Aquí va la configuración específica de tu temporizador
+    for (int y = 0; y < MATRIX_H; y++) {
+        for (int x = 0; x < MATRIX_W; x++) {
+            matrix[y][x] = PIXEL_OFF;
+        }
+    }
 }
 
-// ==================== FUNCION PRINCIPAL ====================
+void set_pixel(int x, int y, uint8_t color) {
+    if (x >= 0 && x < MATRIX_W && y >= 0 && y < MATRIX_H) {
+        matrix[y][x] = color;
+    }
+}
+
+void all_rows_off(void) {
+    for (int i = 0; i < MATRIX_H; i++) {
+        gpio_set_level(row_pins[i], ROW_INACTIVE_LEVEL);
+    }
+}
+
+void all_red_cols_off(void) {
+    for (int i = 0; i < 5; i++) {
+        gpio_set_level(red_col_pins[i], COL_INACTIVE_LEVEL);
+    }
+}
+
+void green_col_off(void) {
+    gpio_set_level(COL_G_1, COL_INACTIVE_LEVEL);
+}
+
+void all_matrix_off(void) {
+    all_rows_off();
+    all_red_cols_off();
+    green_col_off();
+}
+
+void refresh_matrix_once(void) {
+    for (int row = 0; row < MATRIX_H; row++) {
+        all_matrix_off();
+
+        for (int col = 0; col < MATRIX_W; col++) {
+            if (matrix[row][col] == PIXEL_GREEN) {
+                // solo se permite verde en columna 0
+                if (col == 0) {
+                    gpio_set_level(COL_G_1, COL_ACTIVE_LEVEL);
+                }
+            } else if (matrix[row][col] == PIXEL_RED) {
+                // rojo solo en columnas 1..5
+                if (col >= 1 && col <= 5) {
+                    gpio_set_level(red_col_pins[col - 1], COL_ACTIVE_LEVEL);
+                }
+            }
+        }
+
+        gpio_set_level(row_pins[row], ROW_ACTIVE_LEVEL);
+        vTaskDelay(pdMS_TO_TICKS(REFRESH_ROW_MS));
+    }
+
+    all_matrix_off();
+}
+
+void refresh_matrix_for_ms(int total_ms) {
+    int loops = total_ms / REFRESH_FRAME_MS;
+    if (loops < 1) loops = 1;
+
+    for (int i = 0; i < loops; i++) {
+        refresh_matrix_once();
+    }
+}
+
+
+void draw_game(void) {
+    clear_matrix();
+
+    if (!game_over) {
+        // Canasta verde fija en columna 0, altura de 2 pixeles
+        set_pixel(0, basket_y, PIXEL_GREEN);
+        if (basket_y + 1 < MATRIX_H) {
+            set_pixel(0, basket_y + 1, PIXEL_GREEN);
+        }
+
+        // Manzana roja moviéndose desde la derecha hacia la izquierda
+        set_pixel(apple_x, apple_y, PIXEL_RED);
+    }
+}
+
+void show_wait_screen(void) {
+    clear_matrix();
+
+    // muestra solo la canasta mientras empieza
+    set_pixel(0, basket_y, PIXEL_GREEN);
+    if (basket_y + 1 < MATRIX_H) {
+        set_pixel(0, basket_y + 1, PIXEL_GREEN);
+    }
+}
+
+void show_game_over_screen(void) {
+    clear_matrix();
+
+    // llena de rojo las columnas rojas disponibles
+    for (int y = 0; y < MATRIX_H; y++) {
+        for (int x = 1; x < MATRIX_W; x++) {
+            matrix[y][x] = PIXEL_RED;
+        }
+    }
+
+    refresh_matrix_for_ms(500);
+}
+
+void show_catch_flash(void) {
+    clear_matrix();
+
+    // deja la primera columna verde completa como flash de captura
+    for (int y = 0; y < MATRIX_H; y++) {
+        matrix[y][0] = PIXEL_GREEN;
+    }
+
+    refresh_matrix_for_ms(FLASH_MS);
+}
+
+void respawn_apple(void) {
+    apple_x = 5;               // extremo derecho de la zona roja
+    apple_y = rand() % 6;      // fila aleatoria
+}
+
+void reset_game(void) {
+    basket_y = 2;
+    score = 0;
+    lives = 3;
+    game_over = false;
+    game_started = true;
+    respawn_apple();
+}
+
+void move_basket_up(void) {
+    if (basket_y > 0) {
+        basket_y--;
+    }
+}
+
+void move_basket_down(void) {
+    if (basket_y < MATRIX_H - 2) {
+        basket_y++;
+    }
+}
+
+void move_apple_left(void) {
+    apple_x--;
+}
+
+void check_collision_or_miss(void) {
+    // cuando la manzana llega a la columna 1 (la última roja antes de la verde)
+    if (apple_x == 1) {
+        // la canasta ocupa basket_y y basket_y+1 en la columna verde
+        if (apple_y == basket_y || apple_y == basket_y + 1) {
+            score++;
+            show_catch_flash();
+            respawn_apple();
+        } else {
+            lives--;
+            if (lives <= 0) {
+                game_over = true;
+            } else {
+                respawn_apple();
+            }
+        }
+    }
+
+    // seguridad extra
+    if (apple_x < 1) {
+        lives--;
+        if (lives <= 0) {
+            game_over = true;
+        } else {
+            respawn_apple();
+        }
+    }
+}
+
+// Botones  
+int button_pressed(int pin) {
+    return gpio_get_level(pin) == 0;
+}
+
+void configure_matrix_outputs(void) {
+    uint64_t output_mask =
+        (1ULL << ROW_1) |
+        (1ULL << ROW_2) |
+        (1ULL << ROW_3) |
+        (1ULL << ROW_4) |
+        (1ULL << ROW_5) |
+        (1ULL << ROW_6) |
+        (1ULL << COL_R_2) |
+        (1ULL << COL_R_3) |
+        (1ULL << COL_R_4) |
+        (1ULL << COL_R_5) |
+        (1ULL << COL_R_6) |
+        (1ULL << COL_G_1);
+
+    gpio_config_t io_conf;
+    io_conf.pin_bit_mask = output_mask;
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+
+    gpio_config(&io_conf);
+    all_matrix_off();
+}
+
+void configure_buttons(void) {
+    uint64_t input_mask =
+        (1ULL << BTN_UP) |
+        (1ULL << BTN_DOWN) |
+        (1ULL << BTN_START);
+
+    gpio_config_t btn_conf;
+    btn_conf.pin_bit_mask = input_mask;
+    btn_conf.mode = GPIO_MODE_INPUT;
+    btn_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+    btn_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    btn_conf.intr_type = GPIO_INTR_DISABLE;
+
+    gpio_config(&btn_conf);
+}
+
 void app_main(void) {
-   gpio_config_t io_conf = {
-       .pin_bit_mask = (1ULL << ROW_1) | (1ULL << ROW_2) | (1ULL << ROW_3) | (1ULL << ROW_4) |
-                       (1ULL << ROW_5) | (1ULL << ROW_6) |
-                       (1ULL << COL_R_1) | (1ULL << COL_R_2) | (1ULL << COL_R_3) | (1ULL << COL_R_4) |
-                       (1ULL << COL_R_5) | (1ULL << COL_R_6) |
-                       (1ULL << COL_G_1) | (1ULL << COL_G_2) | (1ULL << COL_G_3) | (1ULL << COL_G_4) |
-                       (1ULL << COL_G_5) | (1ULL << COL_G_6),
-       .mode = GPIO_MODE_OUTPUT,
-   };
-   gpio_config(&io_conf);
-   // Configurar el temporizador para multiplexar las filas
-   setup_timer();
-   // Iniciar el juego o la lógica principal
-   while (1) {
-       draw_game();  // Dibuja el estado actual del juego
-       // Refrescar la matriz 6x6
-       vTaskDelay(pdMS_TO_TICKS(250));
-       if (!game_started) {
-           if (gpio_get_level(BTN_START) == 0) {
-               reset_game();
-               vTaskDelay(pdMS_TO_TICKS(250));
-           }
-           vTaskDelay(pdMS_TO_TICKS(10));
-           continue;
-       }
-       if (game_over) {
-           show_game_over_screen();
-           if (gpio_get_level(BTN_START) == 0) {
-               reset_game();
-               vTaskDelay(pdMS_TO_TICKS(250));
-           }
-           vTaskDelay(pdMS_TO_TICKS(10));
-           continue;
-       }
-       if (gpio_get_level(BTN_LEFT) == 0) {
-           move_player_left();
-           vTaskDelay(pdMS_TO_TICKS(120));
-       }
-       if (gpio_get_level(BTN_RIGHT) == 0) {
-           move_player_right();
-           vTaskDelay(pdMS_TO_TICKS(120));
-       }
-       move_apple_down();
-       check_collision_or_miss();
-       vTaskDelay(pdMS_TO_TICKS(250));
-   }
+    configure_matrix_outputs();
+    configure_buttons();
+    clear_matrix();
+
+    while (1) {
+        if (!game_started) {
+            show_wait_screen();
+            refresh_matrix_for_ms(30);
+
+            if (button_pressed(BTN_START)) {
+                reset_game();
+                vTaskDelay(pdMS_TO_TICKS(START_DEBOUNCE_MS));
+            }
+
+            continue;
+        }
+
+        if (game_over) {
+            show_game_over_screen();
+
+            if (button_pressed(BTN_START)) {
+                reset_game();
+                vTaskDelay(pdMS_TO_TICKS(START_DEBOUNCE_MS));
+            }
+
+            continue;
+        }
+
+        if (button_pressed(BTN_UP)) {
+            move_basket_up();
+            vTaskDelay(pdMS_TO_TICKS(BUTTON_DEBOUNCE_MS));
+        }
+
+        if (button_pressed(BTN_DOWN)) {
+            move_basket_down();
+            vTaskDelay(pdMS_TO_TICKS(BUTTON_DEBOUNCE_MS));
+        }
+
+        draw_game();
+        refresh_matrix_for_ms(GAME_STEP_MS);
+
+        move_apple_left();
+        check_collision_or_miss();
+    }
 }

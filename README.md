@@ -1,12 +1,6 @@
 ## JUEGO ATRAPA LA MANZANA
-El juego consiste en que una "manzana" cae y la tabla del jugador tiene que recibirla en la parte inferior.
+El juego consiste en que una "manzana" cae y la canasta que representa a el jugador tiene que recibirla y no dejarla pasar.
 
-El jugador puede mover la tabla a la derecha o a la izquierda para recibir la manzana.
+El jugador puede mover la canasta hacia la derecha o a la izquierda para recibir la manzana.
 
-El juego inicia con el botón de reset o también para volver a empezar luego de un gameover.
-
-En el display se muestra: 
-
-Display 1 = Puntaje 
-
-Display 2 = Vidas 
+El juego inicia con el botón de reset o también para volver a empezar luego de un gameover
