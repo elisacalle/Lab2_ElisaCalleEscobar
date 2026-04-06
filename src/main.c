@@ -6,25 +6,27 @@
 #include "driver/gpio.h"
 #include "driver/timer.h"
 
-#define MATRIX_W 6
+#define MATRIX_W 6 //defino tamaño de la matriz, 6 columnas (1 verde + 5 rojas)
 #define MATRIX_H 6
 
+//defino los niveles activos
 #define ROW_ACTIVE_LEVEL   1
 #define ROW_INACTIVE_LEVEL 0
 
 #define COL_ACTIVE_LEVEL   0
 #define COL_INACTIVE_LEVEL 1
 
+//Matriz[x][y] guarda un estado del pixel: apagado, rojo o verde
 #define PIXEL_OFF    0
 #define PIXEL_RED    1
 #define PIXEL_GREEN  2
 
-#define REFRESH_ROW_MS        1
-#define REFRESH_FRAME_MS      5
-#define GAME_STEP_MS          20000
-#define BUTTON_DEBOUNCE_MS    120
-#define START_DEBOUNCE_MS     200
-#define FLASH_MS              180
+#define REFRESH_ROW_MS        1  //tiempo activación de cada fila para multiplexar (en ms)
+#define REFRESH_FRAME_MS      5  //tiempo total para refrescar toda la matriz (en ms) 
+#define GAME_STEP_MS          20000 //tiempo entre cada paso del juego (cuanto tiempo se mantiene la escena actual antes de mover la manzana)
+#define BUTTON_DEBOUNCE_MS    120 //evita que un solo toque de botón se registre como múltiples eventos debido a rebotes mecánicos del botón
+#define START_DEBOUNCE_MS     200 //lo mismo pero para el botón de inicio  
+#define FLASH_MS              180 //cuanto dura el destello verde cuando atrapa manzana
 
 // 6 filas
 #define ROW_1 16
@@ -58,18 +60,18 @@ static const int red_col_pins[5] = {
 
 static volatile uint8_t matrix[MATRIX_H][MATRIX_W];
 
-static volatile int basket_y = 2;   // canasta en columna 0, se mueve vertical
-static volatile int apple_x = 5;    // manzana inicia a la derecha
+static volatile int basket_y = 2;   
+static volatile int apple_x = 5;    
 static volatile int apple_y = 3;
 
-static volatile int score = 0;
-static volatile int lives = 3;
+static volatile int score = 0; //aciertos
+static volatile int lives = 3; //vidas antes de gameover
 
 static volatile bool game_started = false;
 static volatile bool game_over = false;
 
 //== FUNCIONES BÁSICAS ==
-void clear_matrix(void) {
+void clear_matrix(void) { //la recorre toda y la pone en off
     for (int y = 0; y < MATRIX_H; y++) {
         for (int x = 0; x < MATRIX_W; x++) {
             matrix[y][x] = PIXEL_OFF;
@@ -77,13 +79,13 @@ void clear_matrix(void) {
     }
 }
 
-void set_pixel(int x, int y, uint8_t color) {
+void set_pixel(int x, int y, uint8_t color) { //escribe color específico en una posición válida
     if (x >= 0 && x < MATRIX_W && y >= 0 && y < MATRIX_H) {
         matrix[y][x] = color;
     }
 }
 
-void all_rows_off(void) {
+void all_rows_off(void) { //evitar que queden líneas activas
     for (int i = 0; i < MATRIX_H; i++) {
         gpio_set_level(row_pins[i], ROW_INACTIVE_LEVEL);
     }
@@ -107,7 +109,7 @@ void all_matrix_off(void) {
 
 void refresh_matrix_once(void) {
     for (int row = 0; row < MATRIX_H; row++) {
-        all_matrix_off();
+        all_matrix_off(); //apaga todo antes de activar la fila actual para evitar ghosting
 
         for (int col = 0; col < MATRIX_W; col++) {
             if (matrix[row][col] == PIXEL_GREEN) {
@@ -130,7 +132,7 @@ void refresh_matrix_once(void) {
     all_matrix_off();
 }
 
-void refresh_matrix_for_ms(int total_ms) {
+void refresh_matrix_for_ms(int total_ms) { //mantener visible
     int loops = total_ms / REFRESH_FRAME_MS;
     if (loops < 1) loops = 1;
 
@@ -191,10 +193,10 @@ void show_catch_flash(void) {
 
 void respawn_apple(void) {
     apple_x = 5;               // extremo derecho de la zona roja
-    apple_y = rand() % 6;      // fila aleatoria
+    apple_y = rand() % 6;      // elije fila aleatoria para aparecer
 }
 
-void reset_game(void) {
+void reset_game(void) { //condición inicial conocida
     basket_y = 2;
     score = 0;
     lives = 3;
@@ -301,7 +303,7 @@ void app_main(void) {
     clear_matrix();
 
     while (1) {
-        if (!game_started) {
+        if (!game_started) { //antes de iniciar
             show_wait_screen();
             refresh_matrix_for_ms(30);
 
@@ -313,7 +315,7 @@ void app_main(void) {
             continue;
         }
 
-        if (game_over) {
+        if (game_over) { //si game over
             show_game_over_screen();
 
             if (button_pressed(BTN_START)) {
